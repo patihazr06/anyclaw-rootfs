@@ -1,0 +1,38 @@
+name: mirror-rootfs
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Private build-rootfs run id'
+        required: true
+        default: '34261339863'
+      tag:
+        description: 'Release tag'
+        required: true
+        default: 'v0.1.1'
+permissions:
+  contents: write
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch rootfs artifact from private repo
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          repo: patihazr06/anyclaw
+          run_id: ${{ inputs.run_id }}
+          name: rootfs
+          path: dist-rootfs
+          github_token: ${{ secrets.MIRROR_TOKEN }}
+          workflow_conclusion: success
+      - name: Publish to public release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -lh dist-rootfs/
+          sha256sum -c dist-rootfs/rootfs.tar.zst.sha256
+          if gh release view "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "${{ inputs.tag }}" dist-rootfs/rootfs.tar.zst dist-rootfs/rootfs.tar.zst.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "${{ inputs.tag }}" dist-rootfs/rootfs.tar.zst dist-rootfs/rootfs.tar.zst.sha256 --repo "$GITHUB_REPOSITORY" --title "${{ inputs.tag }}" --notes "Ubuntu noble arm64 rootfs (mirrored from private build run ${{ inputs.run_id }}). Verify: sha256sum -c rootfs.tar.zst.sha256"
+          fi
